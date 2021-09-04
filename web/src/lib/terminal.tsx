@@ -1,6 +1,6 @@
 import React, { RefObject } from "react";
 import { Terminal } from "xterm";
-import * as FontFaceObserver from 'fontfaceobserver';
+import FontFaceObserver from 'fontfaceobserver';
 
 interface Props {
     input?: ReadableStreamDefaultReader,
@@ -44,7 +44,7 @@ class TerminalComponent extends React.Component<Props, State> {
         const font = term.getOption("fontFamily");
         const regular = new FontFaceObserver(font).load();
         const bold = new FontFaceObserver(font, { weight: 'bold' }).load();
-        await regular.constructor.all([regular, bold]);
+        await Promise.all([regular, bold]);
 
         term.open(element);
         term.focus();

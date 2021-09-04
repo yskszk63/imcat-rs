@@ -80,7 +80,7 @@ export default function Home() {
         }
         rxtx.tx(prompt);
     }
-  }, [rxtx, wasm]);
+  }, [rxtx, wasm, cols, rows]);
 
   return (
     <div className={styles.container}>
