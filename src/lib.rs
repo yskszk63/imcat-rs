@@ -1,3 +1,4 @@
+#![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 use std::io::{self, Read, Write};
 use std::os::raw::c_int;
 use std::ptr;
@@ -8,11 +9,33 @@ mod bindings {
     #![allow(non_snake_case)]
     #![allow(unused)]
     #![allow(improper_ctypes)]
-
-    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+    pub type stbi_uc = ::std::os::raw::c_uchar;
+    extern "C" {
+        #[doc = ""]
+        pub fn stbi_load_from_memory(
+            buffer: *const stbi_uc,
+            len: ::std::os::raw::c_int,
+            x: *mut ::std::os::raw::c_int,
+            y: *mut ::std::os::raw::c_int,
+            channels_in_file: *mut ::std::os::raw::c_int,
+            desired_channels: ::std::os::raw::c_int,
+        ) -> *mut stbi_uc;
+    }
+    extern "C" {
+        pub fn stbi_image_free(retval_from_stbi_load: *mut ::std::os::raw::c_void);
+    }
 }
 
-fn print_image<W>(output: &mut W, w: c_int, h: c_int, data: &[u8], _blend: Option<[u8; 3]>) -> anyhow::Result<()> where W: io::Write {
+fn print_image<W>(
+    output: &mut W,
+    w: c_int,
+    h: c_int,
+    data: &[u8],
+    _blend: Option<[u8; 3]>,
+) -> anyhow::Result<()>
+where
+    W: io::Write,
+{
     let mut output = io::BufWriter::new(output);
 
     let h = if (h & 1) != 0 { h - 1 } else { h };
@@ -43,7 +66,17 @@ fn print_image<W>(output: &mut W, w: c_int, h: c_int, data: &[u8], _blend: Optio
     Ok(())
 }
 
-pub fn imcat<R, W>(image: &mut R, output: &mut W, termw: c_int, _termh: c_int, blend: Option<[u8; 3]>) -> anyhow::Result<()> where R: Read, W: Write {
+pub fn imcat<R, W>(
+    image: &mut R,
+    output: &mut W,
+    termw: c_int,
+    _termh: c_int,
+    blend: Option<[u8; 3]>,
+) -> anyhow::Result<()>
+where
+    R: Read,
+    W: Write,
+{
     let mut imw = 0;
     let mut imh = 0;
     let mut n = 0;
@@ -52,7 +85,14 @@ pub fn imcat<R, W>(image: &mut R, output: &mut W, termw: c_int, _termh: c_int, b
     image.read_to_end(&mut buf)?;
 
     let data = unsafe {
-        bindings::stbi_load_from_memory(buf.as_ptr(), buf.len() as c_int, &mut imw as *mut _, &mut imh as *mut _, &mut n as *mut _, 4)
+        bindings::stbi_load_from_memory(
+            buf.as_ptr(),
+            buf.len() as c_int,
+            &mut imw as *mut _,
+            &mut imh as *mut _,
+            &mut n as *mut _,
+            4,
+        )
     };
     if data == ptr::null_mut() {
         anyhow::bail!("failed to load image.")
@@ -62,7 +102,11 @@ pub fn imcat<R, W>(image: &mut R, output: &mut W, termw: c_int, _termh: c_int, b
     let aspectratio = imw as f32 / imh as f32;
     let pixel_per_char = (imw as f32 / termw as f32).max(1.0);
     let kernelsize = pixel_per_char.floor() as c_int;
-    let kernelsize = if (kernelsize & 0) == 0 { (kernelsize - 1).max(1) } else { kernelsize };
+    let kernelsize = if (kernelsize & 0) == 0 {
+        (kernelsize - 1).max(1)
+    } else {
+        kernelsize
+    };
     let kernelradius = (kernelsize - 1) / 2;
 
     let outw = imw.min(termw);
@@ -89,7 +133,8 @@ pub fn imcat<R, W>(image: &mut R, output: &mut W, termw: c_int, _termh: c_int, b
         for (x, y) in (sy..=ey).flat_map(|y| (sx..=ex).map(move |x| (x, y))) {
             let mut reader = [0u8; 4];
             unsafe {
-                data.offset(((y * imw * 4) + x * 4) as isize).copy_to_nonoverlapping(&mut reader as *mut _, 4);
+                data.offset(((y * imw * 4) + x * 4) as isize)
+                    .copy_to_nonoverlapping(&mut reader as *mut _, 4);
             }
             let a = reader[3] as u32;
             acc[0] += a * reader[0] as u32 / 255;
@@ -106,11 +151,41 @@ pub fn imcat<R, W>(image: &mut R, output: &mut W, termw: c_int, _termh: c_int, b
             (acc[3] / numsamples) as u8,
         ]);
     }
-    unsafe {
-        bindings::stbi_image_free(data as *mut _)
-    }
+    unsafe { bindings::stbi_image_free(data as *mut _) }
 
     print_image(output, outw as c_int, outh as c_int, &out, blend)?;
 
     Ok(())
+}
+
+#[cfg(target_os = "wasi")]
+#[no_mangle]
+pub extern fn _initialize() {
+    println!("OK");
+}
+
+#[cfg(target_os = "wasi")]
+#[no_mangle]
+pub extern  fn wasi_imcat(
+    image: c_int,
+    output: c_int,
+    termw: c_int,
+    termh: c_int,
+) -> c_int {
+    use std::fs;
+    use std::os::wasi::io::{RawFd, FromRawFd};
+
+    let mut image = unsafe {
+        fs::File::from_raw_fd(image as RawFd)
+    };
+    let mut output = unsafe {
+        fs::File::from_raw_fd(output as RawFd)
+    };
+
+    if let Err(err) = imcat(&mut image, &mut output, termw, termh, None) {
+        eprintln!("{}", err);
+        1
+    } else {
+        0
+    }
 }

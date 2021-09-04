@@ -1,7 +1,7 @@
-use std::{env, io};
+use imcat_rs as imcat;
 use std::fs;
 use std::os::raw::c_int;
-use imcat_rs as imcat;
+use std::{env, io};
 
 nix::ioctl_read_bad!(tiocgwinsz, nix::libc::TIOCGWINSZ, nix::pty::Winsize);
 
@@ -22,7 +22,12 @@ fn get_terminal_size() -> anyhow::Result<(u16, u16)> {
     Ok((winsize.ws_col, winsize.ws_row))
 }
 
-fn process_image(nm: &str, termw: c_int, termh: c_int, blend: Option<[u8; 3]>) -> anyhow::Result<()> {
+fn process_image(
+    nm: &str,
+    termw: c_int,
+    termh: c_int,
+    blend: Option<[u8; 3]>,
+) -> anyhow::Result<()> {
     let stdout = io::stdout();
 
     if nm == "-" {
@@ -59,7 +64,7 @@ fn main() -> anyhow::Result<()> {
     set_console_mode();
 
     // Step 1: figure out the width and height of terminal.
-    let (width, height) =   get_terminal_size()?;
+    let (width, height) = get_terminal_size()?;
     //println!("{} {}", width, height);
 
     for nm in args {
