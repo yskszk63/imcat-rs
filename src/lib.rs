@@ -61,6 +61,7 @@ where
 
             write!(output, "\x1b[48;2;{};{};{}m▀\x1b[0m", r, g, b)?;
         }
+        writeln!(output, "")?;
     }
     output.flush()?;
     Ok(())
@@ -160,27 +161,18 @@ where
 
 #[cfg(target_os = "wasi")]
 #[no_mangle]
-pub extern fn _initialize() {
+pub extern "C" fn _initialize() {
     println!("OK");
 }
 
 #[cfg(target_os = "wasi")]
 #[no_mangle]
-pub extern  fn wasi_imcat(
-    image: c_int,
-    output: c_int,
-    termw: c_int,
-    termh: c_int,
-) -> c_int {
+pub extern "C" fn wasi_imcat(image: c_int, output: c_int, termw: c_int, termh: c_int) -> c_int {
     use std::fs;
-    use std::os::wasi::io::{RawFd, FromRawFd};
+    use std::os::wasi::io::{FromRawFd, RawFd};
 
-    let mut image = unsafe {
-        fs::File::from_raw_fd(image as RawFd)
-    };
-    let mut output = unsafe {
-        fs::File::from_raw_fd(output as RawFd)
-    };
+    let mut image = unsafe { fs::File::from_raw_fd(image as RawFd) };
+    let mut output = unsafe { fs::File::from_raw_fd(output as RawFd) };
 
     if let Err(err) = imcat(&mut image, &mut output, termw, termh, None) {
         eprintln!("{}", err);

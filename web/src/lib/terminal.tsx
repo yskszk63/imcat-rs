@@ -22,6 +22,7 @@ class TerminalComponent extends React.Component<Props, State> {
             cols: props.cols || 80,
             rows: props.rows || 20,
             fontFamily: 'IBM Plex Mono',
+            convertEol: true,
         });
         this.state = {
             div: React.createRef(),
